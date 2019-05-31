@@ -1,13 +1,6 @@
-import SupportedTypes.BYTE_ARRAY_TYPE
-import SupportedTypes.BYTE_TYPE
-import SupportedTypes.CLASS_TYPE
-import SupportedTypes.INT_ARRAY_TYPE
-import SupportedTypes.INT_TYPE
-import SupportedTypes.LONG_ARRAY_TYPE
-import SupportedTypes.LONG_TYPE
-import SupportedTypes.SHORT_ARRAY_TYPE
-import SupportedTypes.SHORT_TYPE
 import java.nio.ByteBuffer
+import java.nio.ByteBuffer.allocate
+import java.nio.ByteBuffer.wrap
 import java.nio.ByteOrder
 import java.util.*
 
@@ -20,26 +13,14 @@ class PacketMapper<T : Any>(private val definition: PacketDefinition<T>) {
         val args = LinkedList<Any>()
         while (typesIterator.hasNext()) {
             val arg = when (typesIterator.next()) {
-                BYTE_TYPE -> buffer.subBuffer(1).get()
-                SHORT_TYPE -> buffer.subBuffer(2).short
-                INT_TYPE -> buffer.subBuffer(4).int
-                LONG_TYPE -> buffer.subBuffer(8).long
-                BYTE_ARRAY_TYPE -> Array(arraysSizeIterator.next()) {
-                    buffer.subBuffer(1)
-                        .get()
-                }
-                SHORT_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 2) {
-                    buffer.subBuffer(2)
-                        .short
-                }
-                INT_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 4) {
-                    buffer.subBuffer(4)
-                        .int
-                }
-                LONG_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 8) {
-                    buffer.subBuffer(8)
-                        .long
-                }
+                BYTE_TYPE -> buffer.extractByte()
+                SHORT_TYPE -> buffer.extractShort()
+                INT_TYPE -> buffer.extractInt()
+                LONG_TYPE -> buffer.extractLong()
+                BYTE_ARRAY_TYPE -> Array(arraysSizeIterator.next()) { buffer.extractByte() }
+                SHORT_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 2) { buffer.extractShort() }
+                INT_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 4) { buffer.extractInt() }
+                LONG_ARRAY_TYPE -> Array(arraysSizeIterator.next() / 8) { buffer.extractLong() }
                 CLASS_TYPE -> {
                     val packetDefinition = defIterator.next()
                     PacketMapper(packetDefinition).mapToObject(buffer)
@@ -48,18 +29,10 @@ class PacketMapper<T : Any>(private val definition: PacketDefinition<T>) {
             }
             args.add(arg)
         }
-
-        return definition.klass.constructors
-            .iterator()
-            .next()
-            .call(*args.toArray())
+        return definition.createPacket(args)
     }
 
-    fun mapToBuffer(
-        obj: Any,
-        order: ByteOrder,
-        buffer: ByteBuffer = ByteBuffer.allocate(definition.getPacketSize())
-    ): ByteBuffer {
+    fun mapToBuffer(obj: Any, order: ByteOrder, buffer: ByteBuffer = allocate(definition.getPacketSize())): ByteBuffer {
         buffer.order(order)
         val fieldsIterator = obj.javaClass.declaredFields.iterator()
         val typesIterator = definition.fieldTypes.iterator()
@@ -68,35 +41,19 @@ class PacketMapper<T : Any>(private val definition: PacketDefinition<T>) {
         while (typesIterator.hasNext() && fieldsIterator.hasNext()) {
             val field = fieldsIterator.next()
             field.isAccessible = true
-            val any = field.get(obj)
+            val fieldValue = field.get(obj)
             when (typesIterator.next()) {
-                BYTE_TYPE -> buffer.put(any as Byte)
-                SHORT_TYPE -> buffer.putShort(any as Short)
-                INT_TYPE -> buffer.putInt(any as Int)
-                LONG_TYPE -> buffer.putLong(any as Long)
-                BYTE_ARRAY_TYPE -> {
-                    for (byte in any as Array<Byte>) {
-                        buffer.put(byte)
-                    }
-                }
-                SHORT_ARRAY_TYPE -> {
-                    for (sh in any as Array<Short>) {
-                        buffer.putShort(sh)
-                    }
-                }
-                INT_ARRAY_TYPE -> {
-                    for (i in any as Array<Int>) {
-                        buffer.putInt(i)
-                    }
-                }
-                LONG_ARRAY_TYPE -> {
-                    for (l in any as Array<Long>) {
-                        buffer.putLong(l)
-                    }
-                }
+                BYTE_TYPE -> buffer.put(fieldValue as Byte)
+                SHORT_TYPE -> buffer.putShort(fieldValue as Short)
+                INT_TYPE -> buffer.putInt(fieldValue as Int)
+                LONG_TYPE -> buffer.putLong(fieldValue as Long)
+                BYTE_ARRAY_TYPE -> (fieldValue as Array<Byte>).map { buffer.put(it) }
+                SHORT_ARRAY_TYPE -> (fieldValue as Array<Short>).map { buffer.putShort(it) }
+                INT_ARRAY_TYPE -> (fieldValue as Array<Int>).map { buffer.putInt(it) }
+                LONG_ARRAY_TYPE -> (fieldValue as Array<Long>).map { buffer.putLong(it) }
                 CLASS_TYPE -> {
                     val packetDefinition = defIterator.next()
-                    PacketMapper(packetDefinition).mapToBuffer(any, order, buffer)
+                    PacketMapper(packetDefinition).mapToBuffer(fieldValue, order, buffer)
                 }
                 else -> throw IllegalStateException()
             }
@@ -104,10 +61,15 @@ class PacketMapper<T : Any>(private val definition: PacketDefinition<T>) {
         return buffer
     }
 
+    private fun ByteBuffer.extractLong() = subBuffer(8).long
+    private fun ByteBuffer.extractInt() = subBuffer(4).int
+    private fun ByteBuffer.extractShort() = subBuffer(2).short
+    private fun ByteBuffer.extractByte() = subBuffer(1).get()
+
     private fun ByteBuffer.subBuffer(sizeFromCurrentPosition: Int): ByteBuffer {
         val array = ByteArray(sizeFromCurrentPosition)
         get(array, 0, sizeFromCurrentPosition)
-        return ByteBuffer.wrap(array)
+        return wrap(array)
             .order(order())
     }
 }

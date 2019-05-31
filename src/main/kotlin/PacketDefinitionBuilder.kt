@@ -1,10 +1,3 @@
-import SupportedTypes.BYTE_ARRAY_TYPE
-import SupportedTypes.BYTE_TYPE
-import SupportedTypes.INT_ARRAY_TYPE
-import SupportedTypes.INT_TYPE
-import SupportedTypes.LONG_TYPE
-import SupportedTypes.SHORT_ARRAY_TYPE
-import SupportedTypes.SHORT_TYPE
 import java.util.*
 import kotlin.reflect.KClass
 
@@ -67,7 +60,7 @@ class PacketDefinitionBuilder<T : Any>(val klass: KClass<T>) {
     }
 
     fun addClass(definition: PacketDefinition<*>): PacketDefinitionBuilder<T> {
-        fieldsType.add(0)
+        fieldsType.add(CLASS_TYPE)
         definitions.add(definition)
         return this
     }

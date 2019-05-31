@@ -2,7 +2,7 @@ import java.util.*
 import kotlin.reflect.KClass
 
 data class PacketDefinition<T : Any>(
-    val klass: KClass<T>,
+    private val klass: KClass<T>,
     private val bytesCount: Int,
     val fieldTypes: LinkedList<Int>,
     val arraysSize: LinkedList<Int>,
@@ -15,5 +15,12 @@ data class PacketDefinition<T : Any>(
             bytesCount + definitions.map { it.getPacketSize() }
                 .reduce { c1, c2 -> c1 + c2 }
         }
+    }
+
+    fun createPacket(args: List<Any>): T {
+        return klass.constructors
+            .iterator()
+            .next()
+            .call(*args.toTypedArray())
     }
 }
